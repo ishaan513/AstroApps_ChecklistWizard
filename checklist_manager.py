@@ -6,6 +6,51 @@ import os
 # --- Page Config ---
 st.set_page_config(page_title="🚀 Astro Checklist Wizard", layout="centered")
 
+# --- Custom CSS for better UX ---
+st.markdown("""
+<style>
+    /* Checked items styling */
+    .checked-item {
+        opacity: 0.6;
+        text-decoration: line-through;
+    }
+    
+    /* Progress metrics */
+    .metric-container {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 1rem;
+        border-radius: 10px;
+        color: white;
+        text-align: center;
+        margin: 1rem 0;
+    }
+    
+    /* Mandatory item highlight */
+    .mandatory-section {
+        border-left: 4px solid #ef4444;
+        padding-left: 1rem;
+        margin: 1rem 0;
+    }
+    
+    /* Optional item section */
+    .optional-section {
+        border-left: 4px solid #10b981;
+        padding-left: 1rem;
+        margin: 1rem 0;
+    }
+    
+    /* Smoother transitions */
+    .stCheckbox, .stTextInput {
+        transition: all 0.2s ease;
+    }
+    
+    /* Better spacing */
+    .block-container {
+        padding-top: 2rem;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # --- Supabase Setup ---
 @st.cache_resource
 def init_supabase() -> Client:
@@ -27,18 +72,20 @@ with st.sidebar:
     user_name = st.text_input(
         "Enter your name (required for tracking who checks items)",
         value=st.session_state.get("user_name", ""),
-        key="name_input"  # This makes it update session_state automatically
+        key="name_input"
     ).strip()
     
     # Save to session_state
     st.session_state.user_name = user_name if user_name else "Anonymous"
     
     if st.session_state.user_name == "Anonymous":
-        st.warning("⚠️ Please enter your name above — otherwise checks will show as 'Anonymous'")
+        st.warning("⚠️ Please enter your name above")
     else:
-        st.success(f"Logged in as: **{st.session_state.user_name}** 🚀")
+        st.success(f"✅ {st.session_state.user_name}")
 
-    st.markdown("### Appearance")
+    st.divider()
+    
+    st.markdown("### 🎨 Appearance")
     if "theme" not in st.session_state:
         st.session_state.theme = "light"
 
@@ -47,10 +94,10 @@ with st.sidebar:
         st.rerun()
 
     if st.session_state.theme == "light":
-        if st.button("🌙 Dark Mode"):
+        if st.button("🌙 Switch to Dark Mode", use_container_width=True):
             toggle_theme()
     else:
-        if st.button("☀️ Light Mode"):
+        if st.button("☀️ Switch to Light Mode", use_container_width=True):
             toggle_theme()
 
     if st.session_state.theme == "dark":
@@ -64,7 +111,7 @@ def get_templates():
     templates = {}
     for row in response.data:
         templates[row["name"]] = {
-            "id": row["id"],  # Add the ID
+            "id": row["id"],
             "items": row["items"] or [],
             "mandatory": row["mandatory"] or []
         }
@@ -97,12 +144,10 @@ def start_checklist(session_name: str, template_name: str, template_data: dict):
     return response.data[0]["id"]
 
 def update_checklist(checklist_id: str, index: int, checked: bool = None, comment: str = None):
-    # Fetch current state
     current = supabase.table("checklists").select("*").eq("id", checklist_id).single().execute().data
     
     if checked is not None:
         current["checked"][index] = checked
-        # Record who checked it (only when checking, not unchecking)
         if checked:
             current["user_names"][index] = st.session_state.user_name
     
@@ -115,8 +160,17 @@ def update_checklist(checklist_id: str, index: int, checked: bool = None, commen
 
 # --- Main App ---
 st.title("🚀 Astro Checklist Wizard")
+st.caption("Multi-user collaborative checklist system")
 
-mode = st.sidebar.selectbox("Mode", ["Start New Checklist", "View Active Checklists", "Manage Templates"])
+# Mode selection with icons
+mode = st.sidebar.radio(
+    "🎯 Navigation",
+    ["🆕 Start New Checklist", "📋 View Active Checklists", "⚙️ Manage Templates"],
+    label_visibility="collapsed"
+)
+
+# Clean up mode string
+mode = mode.split(" ", 1)[1]  # Remove emoji prefix
 
 # Auto-apply mode change from session_state
 if "mode" in st.session_state:
@@ -124,32 +178,40 @@ if "mode" in st.session_state:
 
 # Auto-select the newly created checklist in view mode
 if mode == "View Active Checklists" and "selected_checklist_id" in st.session_state:
-    # We'll use this in the view block
     preselected_id = st.session_state.selected_checklist_id
 else:
     preselected_id = None
 
 
 if mode == "Manage Templates":
-    st.header("Checklist Templates")
+    st.header("⚙️ Template Management")
+    st.caption("Create and edit checklist templates")
+    
+    st.divider()
+    
     templates = get_templates()
     
-    name = st.text_input("Template Name")
-    items_text = st.text_area("Items (one per line, prefix with * for mandatory)", height=300)
-    
-    if st.button("Save Template") and name and items_text:
-        items = [line.strip() for line in items_text.split("\n") if line.strip()]
-        mandatory = [line.startswith("*") for line in items_text.split("\n")]
-        clean_items = [item.lstrip("* ").strip() for item in items]
-        save_template(name, clean_items, mandatory)
-        st.success("Template saved!")
-        st.rerun()
+    with st.expander("➕ Create New Template", expanded=not templates):
+        name = st.text_input("Template Name", placeholder="e.g., Hot Fire Test Checklist")
+        items_text = st.text_area(
+            "Items (one per line, prefix with * for mandatory)",
+            height=300,
+            placeholder="* Check fuel pressure\nVerify connections\n* Confirm safety zone clear"
+        )
+        
+        if st.button("💾 Save Template", type="primary", use_container_width=True) and name and items_text:
+            items = [line.strip() for line in items_text.split("\n") if line.strip()]
+            mandatory = [line.startswith("*") for line in items_text.split("\n")]
+            clean_items = [item.lstrip("* ").strip() for item in items]
+            save_template(name, clean_items, mandatory)
+            st.success(f"✅ Template '{name}' saved!")
+            st.rerun()
 
-    st.markdown("### Existing Templates")
     if templates:
-        for t_name, t_data in list(templates.items()):  # list() to avoid runtime dict change
-            with st.expander(f"📝 Edit / Delete: {t_name} ({len(t_data['items'])} items)"):
-                print(f"DEBUG: Expander opened for template: {t_name}")
+        st.subheader("📚 Existing Templates")
+        for t_name, t_data in list(templates.items()):
+            mandatory_count = sum(t_data["mandatory"])
+            with st.expander(f"📝 {t_name} • {len(t_data['items'])} items ({mandatory_count} mandatory)"):
                 # Pre-fill form
                 new_name = st.text_input("Template Name", value=t_name, key=f"name_edit_{t_name}")
                 current_text = "\n".join(
@@ -163,9 +225,9 @@ if mode == "Manage Templates":
                     key=f"items_edit_{t_name}"
                 )
 
-                col1, col2, col3 = st.columns(3)
+                col1, col2 = st.columns([2, 1])
                 with col1:
-                    if st.button("💾 Save Changes", key=f"save_{t_name}", type="primary"):
+                    if st.button("💾 Save Changes", key=f"save_{t_name}", type="primary", use_container_width=True):
                         lines = [line.strip() for line in new_items_text.split("\n") if line.strip()]
                         clean_items = [line.lstrip("* ").strip() for line in lines]
                         new_mandatory = [line.startswith("*") for line in lines]
@@ -176,15 +238,12 @@ if mode == "Manage Templates":
                                 "items": clean_items,
                                 "mandatory": new_mandatory
                             }).execute()
-                            st.success(f"Template saved as '{new_name}'!")
+                            st.success(f"✅ Template '{new_name}' updated!")
                             st.rerun()
                         else:
-                            st.error("Invalid items — check your list")
+                            st.error("❌ Invalid items — check your list")
 
                 with col2:
-                    st.write("")  # Spacer
-
-                with col3:
                     template_id = t_data["id"]
                     
                     # Initialize session state for this template's delete confirmation
@@ -194,62 +253,89 @@ if mode == "Manage Templates":
                     
                     # Show delete button or confirmation based on state
                     if not st.session_state[delete_key]:
-                        if st.button("🗑️ Delete Template", key=f"delete_btn_{t_name}", type="secondary"):
+                        if st.button("🗑️ Delete", key=f"delete_btn_{template_id}", type="secondary", use_container_width=True):
                             st.session_state[delete_key] = True
                             st.rerun()
                     else:
-                        st.error(f"⚠️ Permanent delete of '{t_name}' — no undo!")
-                        col_yes, col_no = st.columns(2)
+                        st.error(f"⚠️ Delete '{t_name}'?")
                         
-                        with col_yes:
-                            if st.button("🛑 Yes, Delete", key=f"confirm_yes_{template_id}", type="primary"):
-                                print(f"DEBUG: Deleting template ID: {template_id}, name: '{t_name}'")
-                                response = supabase.table("templates").delete().eq("id", template_id).execute()
-                                if len(response.data) > 0:
-                                    st.success(f"Template '{t_name}' deleted!")
-                                    st.session_state[delete_key] = False  # Reset state
-                                    st.rerun()
-                                else:
-                                    st.error("Delete failed — template not found by ID")
-                                    st.session_state[delete_key] = False  # Reset state
-                        
-                        with col_no:
-                            if st.button("Cancel", key=f"cancel_delete_{template_id}"):
-                                st.session_state[delete_key] = False
+                        if st.button("🛑 Yes, Delete", key=f"confirm_yes_{template_id}", type="primary", use_container_width=True):
+                            response = supabase.table("templates").delete().eq("id", template_id).execute()
+                            
+                            if response.data and len(response.data) > 0:
+                                st.success(f"✅ Template deleted!")
+                                if delete_key in st.session_state:
+                                    del st.session_state[delete_key]
                                 st.rerun()
+                            else:
+                                st.error("❌ Delete failed")
+                                st.session_state[delete_key] = False
+                        
+                        if st.button("Cancel", key=f"cancel_delete_{template_id}", use_container_width=True):
+                            st.session_state[delete_key] = False
+                            st.rerun()
     else:
-        st.info("No templates yet — create one above!")
+        st.info("💡 No templates yet — create one above!")
 
 elif mode == "Start New Checklist":
+    st.header("🆕 Start New Checklist")
+    st.caption("Create a new checklist session from a template")
+    
+    st.divider()
+    
     templates = get_templates()
     if not templates:
-        st.info("No templates yet. Create one in 'Manage Templates' first.")
+        st.warning("⚠️ No templates available")
+        st.info("💡 Create a template in 'Manage Templates' first")
     else:
-        template_name = st.selectbox("Select Template", list(templates.keys()))
-        session_name = st.text_input("Session Name (e.g., 'Jan 4 Hot Fire')")
+        template_name = st.selectbox(
+            "📋 Select Template",
+            list(templates.keys()),
+            help="Choose a checklist template to use"
+        )
         
-        if st.button("Start Checklist 🚀", type="primary") and session_name:
+        # Show template preview
+        if template_name:
+            template_data = templates[template_name]
+            mandatory_count = sum(template_data["mandatory"])
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Total Items", len(template_data["items"]))
+            with col2:
+                st.metric("Mandatory", mandatory_count)
+            with col3:
+                st.metric("Optional", len(template_data["items"]) - mandatory_count)
+        
+        session_name = st.text_input(
+            "🏷️ Session Name",
+            placeholder="e.g., Jan 4 Hot Fire Test",
+            help="Give this checklist session a unique name"
+        )
+        
+        if st.button("🚀 Start Checklist", type="primary", disabled=not session_name, use_container_width=True):
             with st.spinner("Creating checklist..."):
                 new_id = start_checklist(session_name, template_name, templates[template_name])
                 if new_id:
                     st.success("✅ Checklist started successfully!")
-                    # Auto-switch to view mode and select the new one
                     st.session_state.mode = "View Active Checklists"
                     st.session_state.selected_checklist_id = new_id
                     st.rerun()
                 else:
-                    st.error("Failed to start checklist. Check template and try again.")
+                    st.error("❌ Failed to start checklist")
 
 elif mode == "View Active Checklists":
     active_checklists = get_active_checklists()
     
     if not active_checklists:
-        st.info("No active checklists. Start one!")
-        if st.button("Refresh"):
+        st.info("💡 No active checklists")
+        st.caption("Start a new checklist to get going!")
+        if st.button("🔄 Refresh", use_container_width=True):
             st.rerun()
     else:
+        # Session selector
         selected_id = st.selectbox(
-            "Active Sessions",
+            "📋 Active Sessions",
             options=list(active_checklists.keys()),
             format_func=lambda cid: f"{active_checklists[cid]['session_name']} – {active_checklists[cid]['template_name']}",
             index=0 if preselected_id is None else (
@@ -257,31 +343,35 @@ elif mode == "View Active Checklists":
                 if preselected_id in active_checklists else 0
             )
         )
+        
         # Clear the preselection after first load
         if preselected_id:
             del st.session_state.selected_checklist_id
 
         session = active_checklists[selected_id]
         
-        st.subheader(f"{session['session_name']} – {session['template_name']}")
-
-        # Auto-refresh countdown
-        placeholder = st.empty()
-        refresh_interval = 5
-        if "refresh_countdown" not in st.session_state:
-            st.session_state.refresh_countdown = refresh_interval
+        st.divider()
         
-        st.session_state.refresh_countdown -= 1
-        if st.session_state.refresh_countdown <= 0:
-            st.session_state.refresh_countdown = refresh_interval
-            st.rerun()
-        
-        with placeholder:
-            st.caption(f"🔄 Auto-refresh in {st.session_state.refresh_countdown} seconds | {datetime.now().strftime('%H:%M:%S')}")
-            if st.button("Refresh Now"):
+        # Header with refresh
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.subheader(f"{session['session_name']}")
+            st.caption(f"Template: {session['template_name']}")
+        with col2:
+            # Subtle auto-refresh indicator
+            if "refresh_countdown" not in st.session_state:
+                st.session_state.refresh_countdown = 10
+            
+            st.session_state.refresh_countdown -= 1
+            if st.session_state.refresh_countdown <= 0:
+                st.session_state.refresh_countdown = 10
+                st.rerun()
+            
+            st.caption(f"🔄 {st.session_state.refresh_countdown}s")
+            if st.button("Refresh", key="manual_refresh", use_container_width=True):
                 st.rerun()
 
-        # --- Progress Bar ---
+        # --- Enhanced Progress Display ---
         total = len(session["items"])
         checked_count = sum(session["checked"])
         mandatory_count = sum(session["mandatory"])
@@ -290,55 +380,125 @@ elif mode == "View Active Checklists":
         progress = checked_count / total if total > 0 else 0
         mandatory_progress = checked_mandatory / mandatory_count if mandatory_count > 0 else 1
 
-        st.progress(progress)
-        if progress == 1 and (mandatory_count == 0 or mandatory_progress == 1):
-            st.success("✅ Checklist Complete!")
-        elif mandatory_progress < 1:
-            st.error(f"⚠️ {checked_mandatory}/{mandatory_count} mandatory items completed")
+        # Overall Progress Metrics
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Progress", f"{int(progress * 100)}%", f"{checked_count}/{total}")
+        with col2:
+            st.metric("Mandatory", f"{int(mandatory_progress * 100)}%", f"{checked_mandatory}/{mandatory_count}")
+        with col3:
+            optional_count = total - mandatory_count
+            optional_checked = checked_count - checked_mandatory
+            st.metric("Optional", f"{optional_checked}/{optional_count}")
+
+        # Progress bar with color coding
+        if progress == 1.0:
+            st.progress(progress, text="✅ Complete!")
+        elif mandatory_progress < 1.0:
+            st.progress(mandatory_progress, text="⚠️ Mandatory items incomplete")
         else:
-            st.info(f"{checked_count}/{total} items completed")
+            st.progress(progress, text=f"🔄 {int(progress * 100)}% Complete")
 
-        if mandatory_count > 0:
-            st.progress(mandatory_progress)
-            st.caption(f"Mandatory: {checked_mandatory}/{mandatory_count}")
+        st.divider()
 
-        # --- Checklist Items ---
-        for i, item in enumerate(session["items"]):
-            is_mandatory = session["mandatory"][i]
-            current_user = session["user_names"][i] if i < len(session["user_names"]) and session["user_names"][i] else ""
+        # --- Organize items: Mandatory first, then Optional ---
+        mandatory_items = [(i, item) for i, item in enumerate(session["items"]) if session["mandatory"][i]]
+        optional_items = [(i, item) for i, item in enumerate(session["items"]) if not session["mandatory"][i]]
 
-            col1, col2 = st.columns([4, 1])
-            with col1:
-                label = f"{'🔴' if is_mandatory else '⚪'} {item}"
-                if current_user:
-                    label += f" (by {current_user})"
+        # Mandatory Section
+        if mandatory_items:
+            st.markdown("### 🔴 Mandatory Items")
+            for idx, (i, item) in enumerate(mandatory_items, 1):
+                is_checked = session["checked"][i]
+                current_user = session["user_names"][i] if i < len(session["user_names"]) and session["user_names"][i] else ""
 
-                checked = st.checkbox(
-                    label,
-                    value=session["checked"][i],
-                    key=f"check_{selected_id}_{i}"
-                )
-                if checked != session["checked"][i]:
-                    update_checklist(selected_id, i, checked=checked)
-                    st.rerun()
+                # Item container
+                with st.container():
+                    col1, col2 = st.columns([4, 1])
+                    with col1:
+                        label = f"**{idx}.** {item}"
+                        if current_user:
+                            label += f" ✓ *by {current_user}*"
 
-                if is_mandatory and not checked:
-                    st.warning("Mandatory item")
+                        checked = st.checkbox(
+                            label,
+                            value=is_checked,
+                            key=f"check_{selected_id}_{i}"
+                        )
+                        
+                        if checked != is_checked:
+                            update_checklist(selected_id, i, checked=checked)
+                            st.rerun()
 
-                comment = st.text_input(
-                    "Comment",
-                    value=session["comments"][i],
-                    key=f"comm_{selected_id}_{i}"
-                )
-                if comment != session["comments"][i]:
-                    update_checklist(selected_id, i, comment=comment)
+                        # Comment field - only show if checked or has existing comment
+                        if is_checked or session["comments"][i]:
+                            comment = st.text_input(
+                                "💬 Comment",
+                                value=session["comments"][i],
+                                key=f"comm_{selected_id}_{i}",
+                                label_visibility="collapsed",
+                                placeholder="Add a comment..."
+                            )
+                            if comment != session["comments"][i]:
+                                update_checklist(selected_id, i, comment=comment)
 
-            with col2:
-                st.file_uploader("Photo", type=["jpg","png"], key=f"photo_{selected_id}_{i}")
+                    with col2:
+                        st.file_uploader("📷", type=["jpg","png"], key=f"photo_{selected_id}_{i}", label_visibility="collapsed")
+                    
+                    st.divider()
 
-        if st.button("Mark as Complete & Archive", type="primary"):
+        # Optional Section
+        if optional_items:
+            st.markdown("### ⚪ Optional Items")
+            for idx, (i, item) in enumerate(optional_items, 1):
+                is_checked = session["checked"][i]
+                current_user = session["user_names"][i] if i < len(session["user_names"]) and session["user_names"][i] else ""
+
+                with st.container():
+                    col1, col2 = st.columns([4, 1])
+                    with col1:
+                        label = f"{idx}. {item}"
+                        if current_user:
+                            label += f" ✓ *by {current_user}*"
+
+                        checked = st.checkbox(
+                            label,
+                            value=is_checked,
+                            key=f"check_{selected_id}_{i}"
+                        )
+                        
+                        if checked != is_checked:
+                            update_checklist(selected_id, i, checked=checked)
+                            st.rerun()
+
+                        if is_checked or session["comments"][i]:
+                            comment = st.text_input(
+                                "💬 Comment",
+                                value=session["comments"][i],
+                                key=f"comm_{selected_id}_{i}",
+                                label_visibility="collapsed",
+                                placeholder="Add a comment..."
+                            )
+                            if comment != session["comments"][i]:
+                                update_checklist(selected_id, i, comment=comment)
+
+                    with col2:
+                        st.file_uploader("📷", type=["jpg","png"], key=f"photo_{selected_id}_{i}", label_visibility="collapsed")
+                    
+                    st.divider()
+
+        # Complete button
+        st.markdown("---")
+        complete_disabled = mandatory_progress < 1.0
+        if st.button(
+            "✅ Mark as Complete & Archive",
+            type="primary",
+            disabled=complete_disabled,
+            use_container_width=True,
+            help="All mandatory items must be checked first" if complete_disabled else None
+        ):
             supabase.table("checklists").update({"completed": True}).eq("id", selected_id).execute()
-            st.success("Checklist completed!")
+            st.success("🎉 Checklist completed and archived!")
             st.rerun()
 
-st.caption("Multi-user collaborative checklist • Refreshes automatically")
+st.caption("Built with ❤️ for mission-critical operations")
