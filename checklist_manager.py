@@ -4,7 +4,7 @@ from datetime import datetime
 import os
 
 # --- Page Config ---
-st.set_page_config(page_title="🚀 Team Checklist Manager", layout="centered")
+st.set_page_config(page_title="🚀 Astro Checklist Wizard", layout="centered")
 
 # --- Supabase Setup ---
 @st.cache_resource
