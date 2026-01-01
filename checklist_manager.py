@@ -143,6 +143,7 @@ if mode == "Manage Templates":
     if templates:
         for t_name, t_data in list(templates.items()):  # list() to avoid runtime dict change
             with st.expander(f"📝 Edit / Delete: {t_name} ({len(t_data['items'])} items)"):
+                print(f"DEBUG: Expander opened for template: {t_name}")
                 # Pre-fill form
                 new_name = st.text_input("Template Name", value=t_name, key=f"name_edit_{t_name}")
                 current_text = "\n".join(
@@ -180,22 +181,24 @@ if mode == "Manage Templates":
                 with col3:
                     if st.button("🗑️ Delete Template", key=f"delete_btn_{t_name}", type="secondary"):
                         st.error(f"⚠️ Permanent delete of '{t_name}' — no undo!")
+                        print(f"DEBUG: User clicked delete for template name: '{t_name}'")  # Will show in logs
+                        
                         col_yes, col_no = st.columns(2)
                         with col_yes:
                             if st.button("🛑 Yes, Delete", key=f"confirm_delete_{t_name}", type="primary"):
-                                # Fetch the template ID by name
-                                response_find = supabase.table("templates").select("id").eq("name", t_name).execute()
-                                if response_find.data:
-                                    template_id = response_find.data[0]["id"]
-                                    print("DEBUG: Deleting template with ID:", template_id)  # Logs to server
-                                    response_delete = supabase.table("templates").delete().eq("id", template_id).execute()
-                                    if len(response_delete.data) > 0:
-                                        st.success(f"Template '{t_name}' deleted!")
-                                        st.rerun()
-                                    else:
-                                        st.error("Delete failed — no matching ID found")
+                                print(f"DEBUG: Attempting delete for name: '{t_name}'")  # Logs
+                                
+                                # Normalize name (trim spaces)
+                                normalized_name = t_name.strip()
+                                
+                                response = supabase.table("templates").delete().eq("name", normalized_name).execute()
+                                print("DEBUG: Delete response:", response)  # Full response in logs
+                                
+                                if len(response.data) > 0:
+                                    st.success(f"Template '{t_name}' deleted!")
+                                    st.rerun()
                                 else:
-                                    st.error("Template not found — already deleted or name mismatch")
+                                    st.error(f"Delete failed — no template found with name '{normalized_name}'. Check case/spelling in Supabase.")
                         with col_no:
                             if st.button("Cancel", key=f"cancel_delete_{t_name}"):
                                 st.rerun()
