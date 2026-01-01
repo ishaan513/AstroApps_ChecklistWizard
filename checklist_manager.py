@@ -22,10 +22,7 @@ if "user_name" not in st.session_state:
 # --- Sidebar: User Name (Required) + Theme Toggle ---
 with st.sidebar:
     st.markdown("### 👤 Your Identifier")
-
-    if st.button("🔄 Force Refresh All Data"):
-        st.rerun()
-
+    
     # Persistent name input
     user_name = st.text_input(
         "Enter your name (required for tracking who checks items)",
@@ -63,22 +60,14 @@ with st.sidebar:
 
 # --- Helper Functions ---
 def get_templates():
-    response = supabase.table("templates").select("name, items, mandatory").execute()
-    templates = {}
-    for row in response.data:
-        if row["items"] is not None and row["mandatory"] is not None and len(row["items"]) == len(row["mandatory"]):
-            templates[row["name"]] = {
-                "items": row["items"],
-                "mandatory": row["mandatory"]
-            }
-        else:
-            print(f"Skipping invalid template: {row['name']}")  # Debug log
-    return templates
+    response = supabase.table("templates").select("*").execute()
+    return {row["name"]: {"items": row["items"], "mandatory": row["mandatory"]} 
+            for row in response.data}
 
-def save_template(name: str, clean_items: list[str], mandatory: list[bool]):
+def save_template(name: str, items: list[str], mandatory: list[bool]):
     supabase.table("templates").upsert({
         "name": name,
-        "items": clean_items,       # Direct Python list → Supabase handles as array
+        "items": items,
         "mandatory": mandatory
     }).execute()
 
@@ -87,40 +76,19 @@ def get_active_checklists():
     return {row["id"]: row for row in response.data}
 
 def start_checklist(session_name: str, template_name: str, template_data: dict):
-    st.write("DEBUG: Raw template_data from load:", template_data)  # Shows exactly what was loaded
-    
-    items = template_data.get("items", [])
-    mandatory = template_data.get("mandatory", [])
-    
-    st.write("DEBUG: Extracted items:", items)
-    st.write("DEBUG: Extracted mandatory:", mandatory)
-    
-    if not items:
-        st.error("No items in template — cannot start checklist.")
-        return None
-    
-    n = len(items)
-    
+    n = len(template_data["items"])
     data = {
         "session_name": session_name,
         "template_name": template_name,
-        "items": list(items),                # Force to Python list
-        "mandatory": list(mandatory),        # Force to Python list
+        "items": template_data["items"],         
+        "mandatory": template_data["mandatory"],  
         "checked": [False] * n,
         "comments": [""] * n,
         "user_names": [""] * n,
         "completed": False
     }
-    
-    st.write("DEBUG: Final data for insert:", data)
-    
-    try:
-        response = supabase.table("checklists").insert(data).execute()
-        st.success("Checklist started successfully!")
-        return response.data[0]["id"]
-    except Exception as e:
-        st.error(f"Insert error: {str(e)}")
-        return None
+    response = supabase.table("checklists").insert(data).execute()
+    return response.data[0]["id"]
 
 def update_checklist(checklist_id: str, index: int, checked: bool = None, comment: str = None):
     # Fetch current state
@@ -144,32 +112,35 @@ st.title("🚀 Team Checklist Manager")
 
 mode = st.sidebar.selectbox("Mode", ["Start New Checklist", "View Active Checklists", "Manage Templates"])
 
+# Real-time subscription (only in view mode to avoid conflicts)
+if mode == "View Active Checklists":
+    def on_realtime(payload):
+        st.rerun()
+
+    supabase.realtime.connect()
+    supabase.table("checklists").on("UPDATE", on_realtime).subscribe()
 
 if mode == "Manage Templates":
     st.header("Checklist Templates")
     templates = get_templates()
     
-    name = st.text_input("Template Name (unique)")
+    name = st.text_input("Template Name")
     items_text = st.text_area("Items (one per line, prefix with * for mandatory)", height=300)
     
     if st.button("Save Template") and name and items_text:
-        lines = [line.strip() for line in items_text.split("\n") if line.strip()]
-        clean_items = [line.lstrip("* ").strip() for line in lines]
-        mandatory = [line.startswith("*") for line in lines]
-        
-        if len(clean_items) != len(mandatory):
-            st.error("Error processing items — try again")
-        else:
-            save_template(name, clean_items, mandatory)
-            st.success(f"Template '{name}' saved!")
-            st.rerun()
+        items = [line.strip() for line in items_text.split("\n") if line.strip()]
+        mandatory = [line.startswith("*") for line in items_text.split("\n")]
+        clean_items = [item.lstrip("* ").strip() for item in items]
+        save_template(name, clean_items, mandatory)
+        st.success("Template saved!")
+        st.rerun()
 
     st.markdown("### Existing Templates")
-    for t_name, t_data in templates.items():
-        with st.expander(f"{t_name} ({len(t_data['items'])} items)"):
-            for i, item in enumerate(t_data["items"]):
-                prefix = "🔴 " if t_data["mandatory"][i] else "⚪ "
-                st.write(prefix + item)
+    for t_name in templates:
+        if st.button(f"📝 Edit / Delete: {t_name}"):
+            st.session_state.editing_template = t_name
+        if "editing_template" in st.session_state and st.session_state.editing_template == t_name:
+            st.write(templates[t_name]["items"])
 
 elif mode == "Start New Checklist":
     templates = get_templates()
@@ -185,20 +156,19 @@ elif mode == "Start New Checklist":
 
 elif mode == "View Active Checklists":
     # --- Improved Realtime Subscription ---
-    # Auto-refresh every 5 seconds for near real-time updates
-    placeholder = st.empty()
-    if "last_refresh" not in st.session_state:
-        st.session_state.last_refresh = datetime.now()
+    if "checklist_channel" not in st.session_state:
+        def handle_realtime(payload):
+            # Trigger a rerun when any UPDATE happens on checklists table
+            st.session_state.realtime_trigger = datetime.now()
 
-    time_since_refresh = (datetime.now() - st.session_state.last_refresh).seconds
-    if time_since_refresh > 5:
+        # Subscribe once and store the channel
+        channel = supabase.table("checklists").on("UPDATE", handle_realtime).subscribe()
+        st.session_state.checklist_channel = channel
+
+    # Rerun the app if we received a realtime event
+    if st.session_state.get("realtime_trigger"):
         st.rerun()
 
-    with placeholder.container():
-        st.caption(f"🔄 Auto-refresh in {5 - (time_since_refresh % 5)} seconds | Manual refresh 👇")
-        if st.button("Refresh Now"):
-            st.rerun()
-            
     # Fetch latest data (will reflect changes from other devices)
     active_checklists = get_active_checklists()
     
