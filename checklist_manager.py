@@ -22,7 +22,10 @@ if "user_name" not in st.session_state:
 # --- Sidebar: User Name (Required) + Theme Toggle ---
 with st.sidebar:
     st.markdown("### 👤 Your Identifier")
-    
+
+    if st.button("🔄 Force Refresh All Data"):
+        st.rerun()
+
     # Persistent name input
     user_name = st.text_input(
         "Enter your name (required for tracking who checks items)",
@@ -141,13 +144,6 @@ st.title("🚀 Team Checklist Manager")
 
 mode = st.sidebar.selectbox("Mode", ["Start New Checklist", "View Active Checklists", "Manage Templates"])
 
-# Real-time subscription (only in view mode to avoid conflicts)
-if mode == "View Active Checklists":
-    def on_realtime(payload):
-        st.rerun()
-
-    supabase.realtime.connect()
-    supabase.table("checklists").on("UPDATE", on_realtime).subscribe()
 
 if mode == "Manage Templates":
     st.header("Checklist Templates")
@@ -189,19 +185,20 @@ elif mode == "Start New Checklist":
 
 elif mode == "View Active Checklists":
     # --- Improved Realtime Subscription ---
-    if "checklist_channel" not in st.session_state:
-        def handle_realtime(payload):
-            # Trigger a rerun when any UPDATE happens on checklists table
-            st.session_state.realtime_trigger = datetime.now()
+    # Auto-refresh every 5 seconds for near real-time updates
+    placeholder = st.empty()
+    if "last_refresh" not in st.session_state:
+        st.session_state.last_refresh = datetime.now()
 
-        # Subscribe once and store the channel
-        channel = supabase.table("checklists").on("UPDATE", handle_realtime).subscribe()
-        st.session_state.checklist_channel = channel
-
-    # Rerun the app if we received a realtime event
-    if st.session_state.get("realtime_trigger"):
+    time_since_refresh = (datetime.now() - st.session_state.last_refresh).seconds
+    if time_since_refresh > 5:
         st.rerun()
 
+    with placeholder.container():
+        st.caption(f"🔄 Auto-refresh in {5 - (time_since_refresh % 5)} seconds | Manual refresh 👇")
+        if st.button("Refresh Now"):
+            st.rerun()
+            
     # Fetch latest data (will reflect changes from other devices)
     active_checklists = get_active_checklists()
     
