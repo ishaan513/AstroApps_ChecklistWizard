@@ -60,9 +60,17 @@ with st.sidebar:
 
 # --- Helper Functions ---
 def get_templates():
-    response = supabase.table("templates").select("*").execute()
-    return {row["name"]: {"items": row["items"], "mandatory": row["mandatory"]} 
-            for row in response.data}
+    response = supabase.table("templates").select("name, items, mandatory").execute()
+    templates = {}
+    for row in response.data:
+        if row["items"] is not None and row["mandatory"] is not None and len(row["items"]) == len(row["mandatory"]):
+            templates[row["name"]] = {
+                "items": row["items"],
+                "mandatory": row["mandatory"]
+            }
+        else:
+            print(f"Skipping invalid template: {row['name']}")  # Debug log
+    return templates
 
 def save_template(name: str, items: list[str], mandatory: list[bool]):
     supabase.table("templates").upsert({
