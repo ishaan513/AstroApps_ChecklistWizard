@@ -1,168 +1,220 @@
 import streamlit as st
-import pandas as pd
-import json
+from supabase import create_client, Client
 from datetime import datetime
+import os
 
-# Simple JSON file to store templates and active checklists
-TEMPLATES_FILE = "checklists_templates.json"
-ACTIVE_FILE = "active_checklists.json"
+# --- Page Config ---
+st.set_page_config(page_title="🚀 Team Checklist Manager", layout="centered")
 
-# Load/save helpers
-def load_json(file): 
-    try: 
-        with open(file, "r") as f: 
-            return json.load(f)
-    except: 
-        return {}
+# --- Supabase Setup ---
+@st.cache_resource
+def init_supabase() -> Client:
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_ANON_KEY"]
+    return create_client(url, key)
 
-def save_json(file, data):
-    with open(file, "w") as f:
-        json.dump(data, f, indent=4)
+supabase: Client = init_supabase()
 
-# Sidebar: Choose or create checklist
-st.title("🚀 Astro Checklist Wizard")
+# --- Session State for User Name ---
+if "user_name" not in st.session_state:
+    st.session_state.user_name = ""
 
-import streamlit as st
-
-# --- Dark Mode Toggle ---
-if "theme" not in st.session_state:
-    st.session_state.theme = "light"
-
-def toggle_theme():
-    st.session_state.theme = "dark" if st.session_state.theme == "light" else "light"
-
-# Place toggle in sidebar
+# --- Sidebar: User Name + Theme Toggle ---
 with st.sidebar:
-    st.markdown("### Appearance")
-    if st.session_state.theme == "light":
-        if st.button("🌙 Switch to Dark Mode"):
-            toggle_theme()
-            st.rerun()
-    else:
-        if st.button("☀️ Switch to Light Mode"):
-            toggle_theme()
-            st.rerun()
+    st.markdown("### 👤 Your Name")
+    name_input = st.text_input("Enter your name for attribution", value=st.session_state.user_name)
+    if name_input != st.session_state.user_name:
+        st.session_state.user_name = name_input.strip() or "Anonymous"
+    
+    if not st.session_state.user_name or st.session_state.user_name == "Anonymous":
+        st.warning("Please enter your name so we know who checked items!")
 
-# Apply the theme (Streamlit respects system preference by default, but we override)
-if st.session_state.theme == "dark":
-    st._config.set_option("theme.base", "dark")
-else:
-    st._config.set_option("theme.base", "light")
+    st.markdown("### Appearance")
+    if "theme" not in st.session_state:
+        st.session_state.theme = "light"
+
+    def toggle_theme():
+        st.session_state.theme = "dark" if st.session_state.theme == "light" else "light"
+        st.rerun()
+
+    if st.session_state.theme == "light":
+        if st.button("🌙 Dark Mode"):
+            toggle_theme()
+    else:
+        if st.button("☀️ Light Mode"):
+            toggle_theme()
+
+    if st.session_state.theme == "dark":
+        st._config.set_option("theme.base", "dark")
+    else:
+        st._config.set_option("theme.base", "light")
+
+# --- Helper Functions ---
+def get_templates():
+    response = supabase.table("templates").select("*").execute()
+    return {row["name"]: {"items": row["items"], "mandatory": row["mandatory"]} 
+            for row in response.data}
+
+def save_template(name: str, items: list[str], mandatory: list[bool]):
+    supabase.table("templates").upsert({
+        "name": name,
+        "items": items,
+        "mandatory": mandatory
+    }).execute()
+
+def get_active_checklists():
+    response = supabase.table("checklists").select("*").eq("completed", False).order("created_at", desc=True).execute()
+    return {row["id"]: row for row in response.data}
+
+def start_checklist(session_name: str, template_name: str, template_data: dict):
+    n = len(template_data["items"])
+    data = {
+        "session_name": session_name,
+        "template_name": template_name,
+        "checked": [False] * n,
+        "comments": [""] * n,
+        "user_names": [""] * n,
+        "completed": False
+    }
+    response = supabase.table("checklists").insert(data).execute()
+    return response.data[0]["id"]
+
+def update_checklist(checklist_id: str, index: int, checked: bool = None, comment: str = None):
+    # Fetch current state
+    current = supabase.table("checklists").select("*").eq("id", checklist_id).single().execute().data
+    
+    if checked is not None:
+        current["checked"][index] = checked
+        if checked:  # Only record name when checking (not unchecking)
+            current["user_names"][index] = st.session_state.user_name
+    
+    if comment is not None:
+        current["comments"][index] = comment
+    
+    current["updated_at"] = datetime.utcnow().isoformat()
+    
+    supabase.table("checklists").update(current).eq("id", checklist_id).execute()
+
+# --- Main App ---
+st.title("🚀 Team Checklist Manager")
 
 mode = st.sidebar.selectbox("Mode", ["Start New Checklist", "View Active Checklists", "Manage Templates"])
 
+# Real-time subscription (only in view mode to avoid conflicts)
+if mode == "View Active Checklists":
+    def on_realtime(payload):
+        st.rerun()
+
+    supabase.realtime.connect()
+    supabase.table("checklists").on("UPDATE", on_realtime).subscribe()
+
 if mode == "Manage Templates":
-    # Simple template editor (you can expand this)
     st.header("Checklist Templates")
-    templates = load_json(TEMPLATES_FILE)
+    templates = get_templates()
+    
     name = st.text_input("Template Name")
-    items = st.text_area("Items (one per line, prefix with * for mandatory)", height=300)
-    if st.button("Save Template"):
-        templates[name] = {
-            "items": items.split("\n"),
-            "mandatory": [i.startswith("*") for i in items.split("\n")]
-        }
-        save_json(TEMPLATES_FILE, templates)
+    items_text = st.text_area("Items (one per line, prefix with * for mandatory)", height=300)
+    
+    if st.button("Save Template") and name and items_text:
+        items = [line.strip() for line in items_text.split("\n") if line.strip()]
+        mandatory = [line.startswith("*") for line in items_text.split("\n")]
+        clean_items = [item.lstrip("* ").strip() for item in items]
+        save_template(name, clean_items, mandatory)
         st.success("Template saved!")
+        st.rerun()
+
+    st.markdown("### Existing Templates")
+    for t_name in templates:
+        if st.button(f"📝 Edit / Delete: {t_name}"):
+            st.session_state.editing_template = t_name
+        if "editing_template" in st.session_state and st.session_state.editing_template == t_name:
+            st.write(templates[t_name]["items"])
 
 elif mode == "Start New Checklist":
-    templates = load_json(TEMPLATES_FILE)
-    template_name = st.selectbox("Select Template", list(templates.keys()))
-    session_name = st.text_input("Session Name (e.g., 'Jan 4 Hot Fire')")
-    if st.button("Start Checklist"):
-        active = load_json(ACTIVE_FILE)
-        active[f"{session_name}_{datetime.now().isoformat()}"] = {
-            "template": template_name,
-            "items": templates[template_name]["items"],
-            "mandatory": templates[template_name]["mandatory"],
-            "checked": [False] * len(templates[template_name]["items"]),
-            "comments": [""] * len(templates[template_name]["items"]),
-            "photos": [None] * len(templates[template_name]["items"])
-        }
-        save_json(ACTIVE_FILE, active)
-        st.success("Checklist started!")
+    templates = get_templates()
+    if not templates:
+        st.info("No templates yet. Create one in 'Manage Templates' first.")
+    else:
+        template_name = st.selectbox("Select Template", list(templates.keys()))
+        session_name = st.text_input("Session Name (e.g., 'Jan 4 Hot Fire')")
+        if st.button("Start Checklist") and session_name:
+            start_checklist(session_name, template_name, templates[template_name])
+            st.success("Checklist started!")
+            st.rerun()
 
 elif mode == "View Active Checklists":
-    active = load_json(ACTIVE_FILE)
-    if not active:
-        st.info("No active checklists.")
+    active_checklists = get_active_checklists()
+    
+    if not active_checklists:
+        st.info("No active checklists. Start one!")
     else:
-        selected = st.selectbox("Active Sessions", list(active.keys()))
-        session = active[selected]
-        st.subheader(f"{selected.split('_')[0]} – {session['template']}")
-
-        # --- Progress Bar Calculation ---
-        total_items = len(session["items"])
-        checked_items = sum(session["checked"])
-        mandatory_items = sum(session["mandatory"])
-        checked_mandatory = sum(
-            session["checked"][i] for i in range(total_items) if session["mandatory"][i]
+        selected_id = st.selectbox(
+            "Active Sessions",
+            options=list(active_checklists.keys()),
+            format_func=lambda cid: f"{active_checklists[cid]['session_name']} – {active_checklists[cid]['template_name']}"
         )
+        session = active_checklists[selected_id]
+        
+        st.subheader(f"{session['session_name']} – {session['template_name']}")
 
-        progress = checked_items / total_items if total_items > 0 else 0
-        mandatory_progress = checked_mandatory / mandatory_items if mandatory_items > 0 else 1
+        # --- Progress Bar ---
+        total = len(session["items"])
+        checked_count = sum(session["checked"])
+        mandatory_count = sum(session["mandatory"])
+        checked_mandatory = sum(session["checked"][i] for i in range(total) if session["mandatory"][i])
 
-        # Progress bar with color logic
-        if progress == 1 and (mandatory_items == 0 or mandatory_progress == 1):
-            bar_color = "success"
-            status = "✅ Complete!"
-        elif mandatory_progress < 1:
-            bar_color = "error"
-            status = f"⚠️ {checked_mandatory}/{mandatory_items} mandatory items done"
-        else:
-            bar_color = "normal"
-            status = f"{checked_items}/{total_items} items completed"
+        progress = checked_count / total if total > 0 else 0
+        mandatory_progress = checked_mandatory / mandatory_count if mandatory_count > 0 else 1
 
         st.progress(progress)
-        st.caption(f"**Progress:** {status}")
+        if progress == 1 and (mandatory_count == 0 or mandatory_progress == 1):
+            st.success("✅ Checklist Complete!")
+        elif mandatory_progress < 1:
+            st.error(f"⚠️ {checked_mandatory}/{mandatory_count} mandatory items completed")
+        else:
+            st.info(f"{checked_count}/{total} items completed")
 
-        # Optional: Show separate mandatory progress
-        if mandatory_items > 0:
+        if mandatory_count > 0:
             st.progress(mandatory_progress)
-            st.caption(f"**Mandatory Items:** {checked_mandatory}/{mandatory_items}")
+            st.caption(f"Mandatory: {checked_mandatory}/{mandatory_count}")
 
         # --- Checklist Items ---
         for i, item in enumerate(session["items"]):
-            clean_item = item.strip("* ").strip()
             is_mandatory = session["mandatory"][i]
+            current_user = session["user_names"][i]
 
             col1, col2 = st.columns([4, 1])
             with col1:
+                label = f"{'🔴' if is_mandatory else '⚪'} {item}"
+                if current_user:
+                    label += f" (by {current_user})"
+
                 checked = st.checkbox(
-                    f"{'🔴' if is_mandatory else '⚪'} {clean_item}",
+                    label,
                     value=session["checked"][i],
-                    key=f"check_{selected}_{i}"
+                    key=f"check_{selected_id}_{i}"
                 )
                 if checked != session["checked"][i]:
-                    session["checked"][i] = checked
-                    save_json(ACTIVE_FILE, active)
-                    st.rerun()  # Refresh to update progress instantly
+                    update_checklist(selected_id, i, checked=checked)
+                    st.rerun()
 
                 if is_mandatory and not checked:
-                    st.warning("This is a mandatory item")
+                    st.warning("Mandatory item")
 
                 comment = st.text_input(
-                    "Comment (optional)",
+                    "Comment",
                     value=session["comments"][i],
-                    key=f"comm_{selected}_{i}"
+                    key=f"comm_{selected_id}_{i}"
                 )
                 if comment != session["comments"][i]:
-                    session["comments"][i] = comment
-                    save_json(ACTIVE_FILE, active)
+                    update_checklist(selected_id, i, comment=comment)
 
             with col2:
-                photo = st.file_uploader(
-                    "Photo proof",
-                    type=["jpg", "jpeg", "png"],
-                    key=f"photo_{selected}_{i}"
-                )
-                if photo:
-                    st.image(photo, width=100)
-                    # Future: save photo permanently
+                st.file_uploader("Photo", type=["jpg","png"], key=f"photo_{selected_id}_{i}")
 
         if st.button("Mark as Complete & Archive", type="primary"):
-            # TODO: Move to archive file later
-            del active[selected]
-            save_json(ACTIVE_FILE, active)
-            st.success("Checklist completed and archived!")
+            supabase.table("checklists").update({"completed": True}).eq("id", selected_id).execute()
+            st.success("Checklist completed!")
             st.rerun()
+
+st.caption("Real-time multi-user • Changes sync instantly across devices")
