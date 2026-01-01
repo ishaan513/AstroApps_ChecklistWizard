@@ -19,15 +19,24 @@ supabase: Client = init_supabase()
 if "user_name" not in st.session_state:
     st.session_state.user_name = ""
 
-# --- Sidebar: User Name + Theme Toggle ---
+# --- Sidebar: User Name (Required) + Theme Toggle ---
 with st.sidebar:
-    st.markdown("### 👤 Your Name")
-    name_input = st.text_input("Enter your name for attribution", value=st.session_state.user_name)
-    if name_input != st.session_state.user_name:
-        st.session_state.user_name = name_input.strip() or "Anonymous"
+    st.markdown("### 👤 Your Identifier")
     
-    if not st.session_state.user_name or st.session_state.user_name == "Anonymous":
-        st.warning("Please enter your name so we know who checked items!")
+    # Persistent name input
+    user_name = st.text_input(
+        "Enter your name (required for tracking who checks items)",
+        value=st.session_state.get("user_name", ""),
+        key="name_input"  # This makes it update session_state automatically
+    ).strip()
+    
+    # Save to session_state
+    st.session_state.user_name = user_name if user_name else "Anonymous"
+    
+    if st.session_state.user_name == "Anonymous":
+        st.warning("⚠️ Please enter your name above — otherwise checks will show as 'Anonymous'")
+    else:
+        st.success(f"Logged in as: **{st.session_state.user_name}** 🚀")
 
     st.markdown("### Appearance")
     if "theme" not in st.session_state:
@@ -85,7 +94,8 @@ def update_checklist(checklist_id: str, index: int, checked: bool = None, commen
     
     if checked is not None:
         current["checked"][index] = checked
-        if checked:  # Only record name when checking (not unchecking)
+        # Record who checked it (only when checking, not unchecking)
+        if checked:
             current["user_names"][index] = st.session_state.user_name
     
     if comment is not None:
@@ -143,6 +153,21 @@ elif mode == "Start New Checklist":
             st.rerun()
 
 elif mode == "View Active Checklists":
+    # --- Improved Realtime Subscription ---
+    if "checklist_channel" not in st.session_state:
+        def handle_realtime(payload):
+            # Trigger a rerun when any UPDATE happens on checklists table
+            st.session_state.realtime_trigger = datetime.now()
+
+        # Subscribe once and store the channel
+        channel = supabase.table("checklists").on("UPDATE", handle_realtime).subscribe()
+        st.session_state.checklist_channel = channel
+
+    # Rerun the app if we received a realtime event
+    if st.session_state.get("realtime_trigger"):
+        st.rerun()
+
+    # Fetch latest data (will reflect changes from other devices)
     active_checklists = get_active_checklists()
     
     if not active_checklists:
@@ -181,7 +206,7 @@ elif mode == "View Active Checklists":
         # --- Checklist Items ---
         for i, item in enumerate(session["items"]):
             is_mandatory = session["mandatory"][i]
-            current_user = session["user_names"][i]
+            current_user = session["user_names"][i] if i < len(session["user_names"]) else ""
 
             col1, col2 = st.columns([4, 1])
             with col1:
