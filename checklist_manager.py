@@ -87,6 +87,7 @@ def start_checklist(session_name: str, template_name: str, template_data: dict):
         "user_names": [""] * n,
         "completed": False
     }
+    print("Inserting data:", data)  # Temporary debug line
     response = supabase.table("checklists").insert(data).execute()
     return response.data[0]["id"]
 
