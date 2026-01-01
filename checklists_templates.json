@@ -1,0 +1,108 @@
+{
+    "BLP Test": {
+        "items": [
+            "Clear all personnel to designated viewing area ",
+            "",
+            "Set Fuel System to Test-Ready State ",
+            "",
+            "Verify FV-02 is CLOSED (Remote Fuel Vent) ",
+            "",
+            "Verify FV-03 is CLOSED (Main Fuel Valve) ",
+            "",
+            "OPEN NV-02 (Remote Press Iso) ",
+            "",
+            "Verify FPD-01 reads between 450 and 500 psia ",
+            "",
+            "Verify FPD-02 reads ambient (14-15 psia) ",
+            "",
+            "Set Ox System to Test-Ready State ",
+            "",
+            "Verify OV-03 is CLOSED (Main Ox Valve) ",
+            "",
+            "Verify OPD-01 reads <850 psia ",
+            "",
+            "Verify OPD-02 reads ambient (14-15 psia) ",
+            "",
+            "Verify EPD-01 reads ambient (14-15 psia) "
+        ],
+        "mandatory": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+        ]
+    },
+    "BLP_TEST_2": {
+        "items": [
+            "Clear all personnel to designated viewing area ",
+            "Set Fuel System to Test-Ready State ",
+            "Verify FV-02 is CLOSED (Remote Fuel Vent) ",
+            "Verify FV-03 is CLOSED (Main Fuel Valve) ",
+            "OPEN NV-02 (Remote Press Iso) ",
+            "Verify FPD-01 reads between 450 and 500 psia ",
+            "Verify FPD-02 reads ambient (14-15 psia) ",
+            "Set Ox System to Test-Ready State ",
+            "Verify OV-03 is CLOSED (Main Ox Valve) ",
+            "Verify OPD-01 reads <850 psia ",
+            "Verify OPD-02 reads ambient (14-15 psia) ",
+            "Verify EPD-01 reads ambient (14-15 psia) "
+        ],
+        "mandatory": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+        ]
+    },
+    "IREC_TEST": {
+        "items": [
+            "Install one row of 10-32 bolts for the e-bay ",
+            "Slide e-bay into upper body tube, in the correct orientation, until it hits the row of bolts ",
+            "Verify ejection continuity and flight computer signal ",
+            "Install the second row of 10-32 bolts and ensure e-bay is secure ",
+            "Pack drogue chute and shock cord into lower part of the upper body tube ",
+            "Slide upper body tube onto body coupler and install 3 nylon shear pins ",
+            "Verify ejection continuity and flight computer signal ",
+            "Pack main chute and shock cord into upper body tube ",
+            "Slide nose cone onto upper body tube and install 3 nylon shear pins "
+        ],
+        "mandatory": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+        ]
+    }
+}
