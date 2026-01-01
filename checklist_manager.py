@@ -84,20 +84,40 @@ def get_active_checklists():
     return {row["id"]: row for row in response.data}
 
 def start_checklist(session_name: str, template_name: str, template_data: dict):
-    n = len(template_data["items"])
+    st.write("DEBUG: Raw template_data from load:", template_data)  # Shows exactly what was loaded
+    
+    items = template_data.get("items", [])
+    mandatory = template_data.get("mandatory", [])
+    
+    st.write("DEBUG: Extracted items:", items)
+    st.write("DEBUG: Extracted mandatory:", mandatory)
+    
+    if not items:
+        st.error("No items in template — cannot start checklist.")
+        return None
+    
+    n = len(items)
+    
     data = {
         "session_name": session_name,
         "template_name": template_name,
-        "items": template_data["items"],         
-        "mandatory": template_data["mandatory"],  
+        "items": list(items),                # Force to Python list
+        "mandatory": list(mandatory),        # Force to Python list
         "checked": [False] * n,
         "comments": [""] * n,
         "user_names": [""] * n,
         "completed": False
     }
-    print("Inserting data:", data)  # Temporary debug line
-    response = supabase.table("checklists").insert(data).execute()
-    return response.data[0]["id"]
+    
+    st.write("DEBUG: Final data for insert:", data)
+    
+    try:
+        response = supabase.table("checklists").insert(data).execute()
+        st.success("Checklist started successfully!")
+        return response.data[0]["id"]
+    except Exception as e:
+        st.error(f"Insert error: {str(e)}")
+        return None
 
 def update_checklist(checklist_id: str, index: int, checked: bool = None, comment: str = None):
     # Fetch current state
