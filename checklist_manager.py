@@ -150,27 +150,12 @@ elif mode == "Start New Checklist":
             st.rerun()
 
 elif mode == "View Active Checklists":
-    # Auto-refresh every 5 seconds for near real-time updates
-    placeholder = st.empty()
-    if "last_refresh" not in st.session_state:
-        st.session_state.last_refresh = datetime.now()
-
-    time_since_refresh = (datetime.now() - st.session_state.last_refresh).seconds
-    if time_since_refresh > 5:
-        st.rerun()
-
-    with placeholder.container():
-        st.caption(f"🔄 Auto-refresh in {5 - (time_since_refresh % 5)} seconds | Manual refresh 👇")
-        if st.button("Refresh Now"):
-            st.rerun()
-
-    active_checklists = get_active_checklists()
-    # ... rest of your existing View Active Checklists code (selectbox, progress bar, items, etc.)
-    # Fetch latest data (will reflect changes from other devices)
     active_checklists = get_active_checklists()
     
     if not active_checklists:
         st.info("No active checklists. Start one!")
+        if st.button("Refresh"):
+            st.rerun()
     else:
         selected_id = st.selectbox(
             "Active Sessions",
@@ -180,6 +165,22 @@ elif mode == "View Active Checklists":
         session = active_checklists[selected_id]
         
         st.subheader(f"{session['session_name']} – {session['template_name']}")
+
+        # Auto-refresh countdown
+        placeholder = st.empty()
+        refresh_interval = 5
+        if "refresh_countdown" not in st.session_state:
+            st.session_state.refresh_countdown = refresh_interval
+        
+        st.session_state.refresh_countdown -= 1
+        if st.session_state.refresh_countdown <= 0:
+            st.session_state.refresh_countdown = refresh_interval
+            st.rerun()
+        
+        with placeholder:
+            st.caption(f"🔄 Auto-refresh in {st.session_state.refresh_countdown} seconds | {datetime.now().strftime('%H:%M:%S')}")
+            if st.button("Refresh Now"):
+                st.rerun()
 
         # --- Progress Bar ---
         total = len(session["items"])
@@ -205,7 +206,7 @@ elif mode == "View Active Checklists":
         # --- Checklist Items ---
         for i, item in enumerate(session["items"]):
             is_mandatory = session["mandatory"][i]
-            current_user = session["user_names"][i] if i < len(session["user_names"]) else ""
+            current_user = session["user_names"][i] if i < len(session["user_names"]) and session["user_names"][i] else ""
 
             col1, col2 = st.columns([4, 1])
             with col1:
@@ -241,4 +242,4 @@ elif mode == "View Active Checklists":
             st.success("Checklist completed!")
             st.rerun()
 
-st.caption("Real-time multi-user • Changes sync instantly across devices")
+st.caption("Multi-user collaborative checklist • Refreshes automatically")
