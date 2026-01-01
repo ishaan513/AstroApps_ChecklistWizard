@@ -80,6 +80,8 @@ def start_checklist(session_name: str, template_name: str, template_data: dict):
     data = {
         "session_name": session_name,
         "template_name": template_name,
+        "items": template_data["items"],         
+        "mandatory": template_data["mandatory"],  
         "checked": [False] * n,
         "comments": [""] * n,
         "user_names": [""] * n,
