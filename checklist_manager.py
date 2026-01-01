@@ -108,7 +108,7 @@ def update_checklist(checklist_id: str, index: int, checked: bool = None, commen
     supabase.table("checklists").update(current).eq("id", checklist_id).execute()
 
 # --- Main App ---
-st.title("🚀 Team Checklist Manager")
+st.title("🚀 Astro Checklist Wizard")
 
 mode = st.sidebar.selectbox("Mode", ["Start New Checklist", "View Active Checklists", "Manage Templates"])
 
