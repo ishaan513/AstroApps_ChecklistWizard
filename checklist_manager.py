@@ -72,10 +72,10 @@ def get_templates():
             print(f"Skipping invalid template: {row['name']}")  # Debug log
     return templates
 
-def save_template(name: str, items: list[str], mandatory: list[bool]):
+def save_template(name: str, clean_items: list[str], mandatory: list[bool]):
     supabase.table("templates").upsert({
         "name": name,
-        "items": items,
+        "items": clean_items,       # Direct Python list → Supabase handles as array
         "mandatory": mandatory
     }).execute()
 
@@ -133,23 +133,27 @@ if mode == "Manage Templates":
     st.header("Checklist Templates")
     templates = get_templates()
     
-    name = st.text_input("Template Name")
+    name = st.text_input("Template Name (unique)")
     items_text = st.text_area("Items (one per line, prefix with * for mandatory)", height=300)
     
     if st.button("Save Template") and name and items_text:
-        items = [line.strip() for line in items_text.split("\n") if line.strip()]
-        mandatory = [line.startswith("*") for line in items_text.split("\n")]
-        clean_items = [item.lstrip("* ").strip() for item in items]
-        save_template(name, clean_items, mandatory)
-        st.success("Template saved!")
-        st.rerun()
+        lines = [line.strip() for line in items_text.split("\n") if line.strip()]
+        clean_items = [line.lstrip("* ").strip() for line in lines]
+        mandatory = [line.startswith("*") for line in lines]
+        
+        if len(clean_items) != len(mandatory):
+            st.error("Error processing items — try again")
+        else:
+            save_template(name, clean_items, mandatory)
+            st.success(f"Template '{name}' saved!")
+            st.rerun()
 
     st.markdown("### Existing Templates")
-    for t_name in templates:
-        if st.button(f"📝 Edit / Delete: {t_name}"):
-            st.session_state.editing_template = t_name
-        if "editing_template" in st.session_state and st.session_state.editing_template == t_name:
-            st.write(templates[t_name]["items"])
+    for t_name, t_data in templates.items():
+        with st.expander(f"{t_name} ({len(t_data['items'])} items)"):
+            for i, item in enumerate(t_data["items"]):
+                prefix = "🔴 " if t_data["mandatory"][i] else "⚪ "
+                st.write(prefix + item)
 
 elif mode == "Start New Checklist":
     templates = get_templates()
