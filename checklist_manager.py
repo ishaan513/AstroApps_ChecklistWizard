@@ -140,11 +140,49 @@ if mode == "Manage Templates":
         st.rerun()
 
     st.markdown("### Existing Templates")
-    for t_name in templates:
-        if st.button(f"📝 Edit / Delete: {t_name}"):
-            st.session_state.editing_template = t_name
-        if "editing_template" in st.session_state and st.session_state.editing_template == t_name:
-            st.write(templates[t_name]["items"])
+    if templates:
+        for t_name, t_data in templates.items():
+            with st.expander(f"📝 Edit / Delete: {t_name} ({len(t_data['items'])} items)"):
+                # Pre-fill edit form
+                new_name = st.text_input("Template Name", value=t_name, key=f"name_{t_name}")
+                current_text = "\n".join(
+                    f"* {item}" if mandatory else item
+                    for item, mandatory in zip(t_data["items"], t_data["mandatory"])
+                )
+                new_items_text = st.text_area(
+                    "Items (one per line, prefix with * for mandatory)",
+                    value=current_text,
+                    height=300,
+                    key=f"items_{t_name}"
+                )
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("💾 Save Changes", key=f"save_{t_name}", type="primary"):
+                        lines = [line.strip() for line in new_items_text.split("\n") if line.strip()]
+                        clean_items = [line.lstrip("* ").strip() for line in lines]
+                        new_mandatory = [line.startswith("*") for line in lines]
+                        
+                        if clean_items and len(clean_items) == len(new_mandatory):
+                            # Update in Supabase (upsert handles both update and name change)
+                            supabase.table("templates").upsert({
+                                "name": new_name,
+                                "items": clean_items,
+                                "mandatory": new_mandatory
+                            }).execute()
+                            st.success(f"Template '{new_name}' updated!")
+                            st.rerun()
+                        else:
+                            st.error("No items or processing error")
+
+                with col2:
+                    if st.button("🗑️ Delete Template", key=f"delete_{t_name}", type="secondary"):
+                        if st.checkbox(f"Confirm delete '{t_name}'", key=f"confirm_{t_name}"):
+                            supabase.table("templates").delete().eq("name", t_name).execute()
+                            st.success(f"Template '{t_name}' deleted!")
+                            st.rerun()
+    else:
+        st.info("No templates yet — create one above!")
 
 elif mode == "Start New Checklist":
     templates = get_templates()
@@ -186,7 +224,7 @@ elif mode == "View Active Checklists":
         # Clear the preselection after first load
         if preselected_id:
             del st.session_state.selected_checklist_id
-            
+
         session = active_checklists[selected_id]
         
         st.subheader(f"{session['session_name']} – {session['template_name']}")
