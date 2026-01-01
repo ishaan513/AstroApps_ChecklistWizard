@@ -179,19 +179,19 @@ if mode == "Manage Templates":
 
                 with col3:
                     if st.button("🗑️ Delete Template", key=f"delete_btn_{t_name}", type="secondary"):
-                        st.warning(f"Are you sure you want to delete '{t_name}'?")
+                        st.error(f"⚠️ This will permanently delete '{t_name}' — cannot be undone!")
                         col_yes, col_no = st.columns(2)
                         with col_yes:
-                            if st.button("Yes, Delete", key=f"confirm_delete_{t_name}", type="destructive"):
-                                # Delete by original name (safe)
+                            if st.button("🛑 Yes, Delete Forever", key=f"confirm_delete_{t_name}", type="primary"):
                                 response = supabase.table("templates").delete().eq("name", t_name).execute()
-                                if response.data:
-                                    st.success(f"Template '{t_name}' deleted!")
+                                if response.data:  # Successful delete returns the deleted row
+                                    st.success(f"Template '{t_name}' deleted successfully!")
                                     st.rerun()
                                 else:
-                                    st.error("Delete failed — template may already be gone")
+                                    st.error("Delete failed — template may have already been removed")
                         with col_no:
                             if st.button("Cancel", key=f"cancel_delete_{t_name}"):
+                                st.info("Delete canceled")
                                 st.rerun()
     else:
         st.info("No templates yet — create one above!")
