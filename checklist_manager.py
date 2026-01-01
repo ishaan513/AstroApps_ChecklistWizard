@@ -179,17 +179,23 @@ if mode == "Manage Templates":
 
                 with col3:
                     if st.button("🗑️ Delete Template", key=f"delete_btn_{t_name}", type="secondary"):
-                        print("DEBUG: Trying to delete template with name:", t_name)
                         st.error(f"⚠️ Permanent delete of '{t_name}' — no undo!")
                         col_yes, col_no = st.columns(2)
                         with col_yes:
                             if st.button("🛑 Yes, Delete", key=f"confirm_delete_{t_name}", type="primary"):
-                                response = supabase.table("templates").delete().eq("name", t_name).execute()
-                                if len(response.data) > 0:  # ← Check if row was actually deleted
-                                    st.success(f"Template '{t_name}' deleted!")
-                                    st.rerun()
+                                # Fetch the template ID by name
+                                response_find = supabase.table("templates").select("id").eq("name", t_name).execute()
+                                if response_find.data:
+                                    template_id = response_find.data[0]["id"]
+                                    print("DEBUG: Deleting template with ID:", template_id)  # Logs to server
+                                    response_delete = supabase.table("templates").delete().eq("id", template_id).execute()
+                                    if len(response_delete.data) > 0:
+                                        st.success(f"Template '{t_name}' deleted!")
+                                        st.rerun()
+                                    else:
+                                        st.error("Delete failed — no matching ID found")
                                 else:
-                                    st.error("No template found to delete — may already be gone or name mismatch")
+                                    st.error("Template not found — already deleted or name mismatch")
                         with col_no:
                             if st.button("Cancel", key=f"cancel_delete_{t_name}"):
                                 st.rerun()
