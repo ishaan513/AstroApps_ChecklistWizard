@@ -112,7 +112,16 @@ st.title("🚀 Astro Checklist Wizard")
 
 mode = st.sidebar.selectbox("Mode", ["Start New Checklist", "View Active Checklists", "Manage Templates"])
 
-# Real-time subscription (only in view mode to avoid conflicts)
+# Auto-apply mode change from session_state
+if "mode" in st.session_state:
+    mode = st.session_state.mode
+
+# Auto-select the newly created checklist in view mode
+if mode == "View Active Checklists" and "selected_checklist_id" in st.session_state:
+    # We'll use this in the view block
+    preselected_id = st.session_state.selected_checklist_id
+else:
+    preselected_id = None
 
 
 if mode == "Manage Templates":
@@ -144,10 +153,18 @@ elif mode == "Start New Checklist":
     else:
         template_name = st.selectbox("Select Template", list(templates.keys()))
         session_name = st.text_input("Session Name (e.g., 'Jan 4 Hot Fire')")
-        if st.button("Start Checklist") and session_name:
-            start_checklist(session_name, template_name, templates[template_name])
-            st.success("Checklist started!")
-            st.rerun()
+        
+        if st.button("Start Checklist 🚀", type="primary") and session_name:
+            with st.spinner("Creating checklist..."):
+                new_id = start_checklist(session_name, template_name, templates[template_name])
+                if new_id:
+                    st.success("✅ Checklist started successfully!")
+                    # Auto-switch to view mode and select the new one
+                    st.session_state.mode = "View Active Checklists"
+                    st.session_state.selected_checklist_id = new_id
+                    st.rerun()
+                else:
+                    st.error("Failed to start checklist. Check template and try again.")
 
 elif mode == "View Active Checklists":
     active_checklists = get_active_checklists()
@@ -160,8 +177,16 @@ elif mode == "View Active Checklists":
         selected_id = st.selectbox(
             "Active Sessions",
             options=list(active_checklists.keys()),
-            format_func=lambda cid: f"{active_checklists[cid]['session_name']} – {active_checklists[cid]['template_name']}"
+            format_func=lambda cid: f"{active_checklists[cid]['session_name']} – {active_checklists[cid]['template_name']}",
+            index=0 if preselected_id is None else (
+                list(active_checklists.keys()).index(preselected_id) 
+                if preselected_id in active_checklists else 0
+            )
         )
+        # Clear the preselection after first load
+        if preselected_id:
+            del st.session_state.selected_checklist_id
+            
         session = active_checklists[selected_id]
         
         st.subheader(f"{session['session_name']} – {session['template_name']}")
