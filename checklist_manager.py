@@ -185,21 +185,37 @@ if mode == "Manage Templates":
                     st.write("")  # Spacer
 
                 with col3:
-                    template_id = t_data["id"]  # Get the ID from loaded data
-                    if st.button("🗑️ Delete Template", key=f"delete_btn_{t_name}", type="secondary"):
+                    template_id = t_data["id"]
+                    
+                    # Initialize session state for this template's delete confirmation
+                    delete_key = f"confirm_delete_{template_id}"
+                    if delete_key not in st.session_state:
+                        st.session_state[delete_key] = False
+                    
+                    # Show delete button or confirmation based on state
+                    if not st.session_state[delete_key]:
+                        if st.button("🗑️ Delete Template", key=f"delete_btn_{t_name}", type="secondary"):
+                            st.session_state[delete_key] = True
+                            st.rerun()
+                    else:
                         st.error(f"⚠️ Permanent delete of '{t_name}' — no undo!")
                         col_yes, col_no = st.columns(2)
+                        
                         with col_yes:
-                            if st.button("🛑 Yes, Delete", key=f"confirm_delete_{t_name}", type="primary"):
-                                print(f"DEBUG: Deleting template ID: {template_id}, name: '{t_name}'")  # Will show in logs
+                            if st.button("🛑 Yes, Delete", key=f"confirm_yes_{template_id}", type="primary"):
+                                print(f"DEBUG: Deleting template ID: {template_id}, name: '{t_name}'")
                                 response = supabase.table("templates").delete().eq("id", template_id).execute()
                                 if len(response.data) > 0:
                                     st.success(f"Template '{t_name}' deleted!")
+                                    st.session_state[delete_key] = False  # Reset state
                                     st.rerun()
                                 else:
                                     st.error("Delete failed — template not found by ID")
+                                    st.session_state[delete_key] = False  # Reset state
+                        
                         with col_no:
-                            if st.button("Cancel", key=f"cancel_delete_{t_name}"):
+                            if st.button("Cancel", key=f"cancel_delete_{template_id}"):
+                                st.session_state[delete_key] = False
                                 st.rerun()
     else:
         st.info("No templates yet — create one above!")
