@@ -104,6 +104,16 @@ with st.sidebar:
         st._config.set_option("theme.base", "dark")
     else:
         st._config.set_option("theme.base", "light")
+    
+    st.divider()
+    
+    st.markdown("### 🐛 Found a Bug?")
+    st.link_button(
+        "Report Issue",
+        "https://forms.gle/bjbZy3aSsfHJAJEb7",
+        use_container_width=True,
+        type="secondary"
+    )
 
 # --- Helper Functions ---
 def get_templates():
@@ -439,4 +449,4 @@ elif mode == "View Active Checklists":
             st.success("🎉 Checklist completed and archived!")
             st.rerun()
 
-st.caption("Built with ❤️ for mission-critical operations | Ishaan Patel")
+st.caption("Built with ❤️ for mission-critical operations")
