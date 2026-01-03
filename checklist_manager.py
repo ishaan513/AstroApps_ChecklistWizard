@@ -432,4 +432,4 @@ elif mode == "View Active Checklists":
             st.success("🎉 Checklist completed and archived!")
             st.rerun()
 
-st.caption("Built with ❤️ for mission-critical operations")
+st.caption("Built with ❤️ for mission-critical operations | Ishaan Patel")
