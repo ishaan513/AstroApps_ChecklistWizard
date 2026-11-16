@@ -1,6 +1,31 @@
 # AstroApps_ChecklistWizard
 Part of the Astro App suite. Checklist Wizard allows users to input procedural checklists, manage them, and use them during operations.
 
+# Setup
+Requires Python 3.11 or newer.
+
+1. Create a virtual environment and install dependencies:
+
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate
+   pip install -r requirements.txt
+   ```
+
+2. Add your Supabase credentials. Copy the example secrets file and replace the placeholders with your project URL and anon key (Supabase dashboard → Project Settings → API):
+
+   ```bash
+   cp .streamlit/secrets.toml.example .streamlit/secrets.toml
+   ```
+
+   `.streamlit/secrets.toml` is gitignored. Do not commit it.
+
+3. Run the app:
+
+   ```bash
+   streamlit run checklist_manager.py
+   ```
+
 # User's Guide
 1. Enter your name in the side menu to log all checks
 2. If creating a new checklist template, set mode to *Manage Templates*
